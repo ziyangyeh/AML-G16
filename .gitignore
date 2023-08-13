@@ -1,0 +1,9 @@
+__pycache__
+.vscode
+.ipynb_checkpoints
+.DS_Store
+
+formatted_data
+Teeth3DS
+
+test.py

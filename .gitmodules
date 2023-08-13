@@ -1,0 +1,24 @@
+[submodule "external/MeshSegNet"]
+	path = external/MeshSegNet
+	url = git@github.com:ziyangyeh/MeshSegNet.git
+[submodule "external/iMeshSegNet"]
+	path = external/iMeshSegNet
+	url = git@github.com:ziyangyeh/iMeshSegNet.git
+[submodule "external/openpoints"]
+	path = external/openpoints
+	url = git@github.com:guochengqian/openpoints.git
+[submodule "external/TSGCNet"]
+	path = external/TSGCNet
+	url = git@github.com:ZhangLingMing1/TSGCNet.git
+[submodule "external/ToothGroupNetwork"]
+	path = external/ToothGroupNetwork
+	url = git@github.com:limhoyeon/ToothGroupNetwork.git
+[submodule "external/Pointcept"]
+	path = external/Pointcept
+	url = git@github.com:Pointcept/Pointcept.git
+[submodule "external/Pointnet_Pointnet2_pytorch"]
+	path = external/Pointnet_Pointnet2_pytorch
+	url = git@github.com:yanx27/Pointnet_Pointnet2_pytorch.git
+[submodule "external/dgcnn_pytorch"]
+	path = external/dgcnn_pytorch
+	url = git@github.com:antao97/dgcnn.pytorch.git
