@@ -12,7 +12,6 @@ from torch.utils.data import Dataset
 sys.path.insert(0, sys.path[0] + "/../")
 from utils import normalize
 
-
 class Teeth3DS(Dataset):
     def __init__(
         self,
@@ -24,6 +23,7 @@ class Teeth3DS(Dataset):
         mesh_feature_select: List[Literal["xyz", "xyz3", "norm", "norm3"]] = ["xyz"],
         number_classes: int = 17,  # Gum(1) + teeth(7*2) + wisdom teeh(1*2)
         transform: Optional[Callable] = None,
+        **kwargs,
     ) -> None:
         super(Teeth3DS, self).__init__()
         self.dataframe = self._filter(dataframe, jaw, image, depth, decimated)
@@ -37,10 +37,8 @@ class Teeth3DS(Dataset):
         self.xyz3 = True if "xyz3" in mesh_feature_select else False
         self.norm = True if "norm" in mesh_feature_select else False
         self.norm3 = True if "norm3" in mesh_feature_select else False
-
     def len(self):
         return len(self.dataframe)
-
     def __getitem__(self, index):
         # IMAGE PIPELINE
         image_dict = {}
@@ -63,14 +61,10 @@ class Teeth3DS(Dataset):
         elif self.c == 3 or self.c == 1:
             for idx, _item in enumerate(self.cols):
                 cur = self.dataframe.iloc[index, self.dataframe.columns.get_loc(_item)]
-                image_dict[f"image_{idx}"] = (
-                    np.asarray(Image.open(cur)) if self.c == 3 else np.load(cur)
-                )
+                image_dict[f"image_{idx}"] = np.asarray(Image.open(cur)) if self.c == 3 else np.load(cur)
 
         # MESH PIPELINE
-        mesh = vedo.Mesh(
-            self.dataframe.iloc[index, self.dataframe.columns.get_loc("mesh")]
-        )
+        mesh = vedo.Mesh(self.dataframe.iloc[index, self.dataframe.columns.get_loc("mesh")])
         # Traslate into origin.
         mesh.points(mesh.points() - mesh.center_of_mass())
         # Get translated points
@@ -87,9 +81,7 @@ class Teeth3DS(Dataset):
             # x0,y0,z0,x1,y1,z1,x2,y2,z2 in "feat", Ncells * 3 * 3 ==> Necells * 9
             faces_vertices = points[mesh.faces()].reshape(mesh.ncells * 3, 3)
             # Normalize cells' 3 vertices(from cells' indices).
-            faces_vertices = normalize(faces_vertices, ref=points, type="xyz").reshape(
-                mesh.ncells, 9
-            )
+            faces_vertices = normalize(faces_vertices, ref=points, type="xyz").reshape(mesh.ncells, 9)
             feature_list.append(faces_vertices)
 
         if self.norm:
@@ -100,12 +92,8 @@ class Teeth3DS(Dataset):
             feature_list.append(cell_normals)
 
         if self.norm3:
-            faces_vertices_normals = mesh.pointdata["Normals"][mesh.faces()].reshape(
-                mesh.ncells * 3, 3
-            )
-            faces_vertices_normals = normalize(
-                faces_vertices_normals, type="xyz"
-            ).reshape(mesh.ncells, 9)
+            faces_vertices_normals = mesh.pointdata["Normals"][mesh.faces()].reshape(mesh.ncells * 3, 3)
+            faces_vertices_normals = normalize(faces_vertices_normals, type="xyz").reshape(mesh.ncells, 9)
             feature_list.append(faces_vertices_normals)
 
         # Concatenate features
@@ -122,14 +110,11 @@ class Teeth3DS(Dataset):
             return image_dict
         else:
             return {"feats": feats, "labels": labels}
-
     def _select(self):
         if self.image:
             img_lst = sorted([i for i in self.dataframe.columns.values if "image" in i])
         if self.depth:
-            depth_lst = sorted(
-                [i for i in self.dataframe.columns.values if "depth" in i]
-            )
+            depth_lst = sorted([i for i in self.dataframe.columns.values if "depth" in i])
         if self.rgbd:
             return 4, list(zip(img_lst, depth_lst))
         elif self.image or self.depth:
@@ -139,7 +124,6 @@ class Teeth3DS(Dataset):
                 return 3, img_lst
         else:
             return 0, None
-
     def _filter(
         self,
         dataframe: pd.DataFrame,
@@ -155,9 +139,7 @@ class Teeth3DS(Dataset):
                 selected = [i for i in selected if "image" not in i]
             if not depth:
                 selected = [i for i in selected if "depth" not in i]
-            result = dataframe[selected].rename(
-                columns={k: v for k, v in zip(selected, [i[6:] for i in selected])}
-            )
+            result = dataframe[selected].rename(columns={k: v for k, v in zip(selected, [i[6:] for i in selected])})
         else:
             upper = list(filter(lambda x: "upper" in x, dataframe.columns.values))
             lower = list(filter(lambda x: "lower" in x, dataframe.columns.values))
@@ -169,14 +151,9 @@ class Teeth3DS(Dataset):
                 lower = [i for i in lower if "depth" not in i]
             upper_df = dataframe[upper]
             lower_df = dataframe[lower]
-            result = (
-                pd.concat([upper_df, lower_df], ignore_index=True, axis=0)[upper]
-                .rename(columns=({k: v for k, v in zip(upper, [i[6:] for i in upper])}))
-                .drop(columns=["mesh" if decimated else "mesh_d"])
-            )
+            result = pd.concat([upper_df, lower_df], ignore_index=True, axis=0)[upper].rename(columns=({k: v for k, v in zip(upper, [i[6:] for i in upper])})).drop(columns=["mesh" if decimated else "mesh_d"])
         result.rename(columns={"mesh_d": "mesh"}, inplace=True)
         return result
-
 
 if __name__ == "__main__":
     df = pd.read_csv("formatted_data/teeth3ds.csv")
@@ -186,9 +163,7 @@ if __name__ == "__main__":
     print({f"{k}_shape": v.shape for k, v in teeth3ds[0].items()})
     teeth3ds = Teeth3DS(df, "lower", depth=False)
     print({f"{k}_shape": v.shape for k, v in teeth3ds[0].items()})
-    teeth3ds = Teeth3DS(
-        df, "upper", mesh_feature_select=["xyz", "xyz3", "norm", "norm3"]
-    )
+    teeth3ds = Teeth3DS(df, "upper", mesh_feature_select=["xyz", "xyz3", "norm", "norm3"])
     print({f"{k}_shape": v.shape for k, v in teeth3ds[0].items()})
     teeth3ds = Teeth3DS(df, "upper", mesh_feature_select=["xyz", "xyz3", "norm"])
     print({f"{k}_shape": v.shape for k, v in teeth3ds[0].items()})

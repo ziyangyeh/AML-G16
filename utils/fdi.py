@@ -2,12 +2,10 @@ import numpy as np
 import vedo
 import vtk
 
-
 def get_point_ids_by_point_label(mesh, label_num=0, FDI=False):
     labels = mesh.pointdata["InsLabels"] if not FDI else mesh.pointdata["FDI"]
     index = np.where(labels == label_num)
     return index[0]
-
 
 def get_cell_ids_by_point_index(mesh, indices):
     cell_ids = vtk.vtkIdList()
@@ -19,7 +17,6 @@ def get_cell_ids_by_point_index(mesh, indices):
         for j in range(cell_ids.GetNumberOfIds()):
             result.append(cell_ids.GetId(j))
     return result
-
 
 def get_cell_ids_by_point_label(mesh, label_num=0, FDI=False):
     cell_ids = vtk.vtkIdList()
@@ -33,7 +30,6 @@ def get_cell_ids_by_point_label(mesh, label_num=0, FDI=False):
             result.append(cell_ids.GetId(j))
     return result
 
-
 def generate_cell_labels_from_point_label(mesh, FDI=False):
     cell_labels = np.zeros(mesh.ncells, dtype=np.uint8)
     if not FDI:
@@ -44,12 +40,10 @@ def generate_cell_labels_from_point_label(mesh, FDI=False):
             cell_labels[get_cell_ids_by_point_label(mesh, i, FDI)] = i
     return cell_labels
 
-
 def crop_cells_by_point_label(mesh: vedo.Mesh, label_num=0, FDI=False):
     labels = mesh.pointdata["InsLabels"] if not FDI else mesh.pointdata["FDI"]
     ids = np.where(labels != label_num)
     return mesh.clone(deep=True).delete_cells_by_point_index(ids)
-
 
 def get_fdi_label_map():
     label_odd = np.arange(1, 17, 2)

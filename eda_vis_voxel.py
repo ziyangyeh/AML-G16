@@ -17,21 +17,15 @@ LOWER_DIR = DATASET_DIR / Path("lower")
 UPPER_DIR = DATASET_DIR / Path("upper")
 
 total_pairs = zip(DATASET_DIR.glob("*/*/*.obj"), DATASET_DIR.glob("*/*/*.json"))
-assert len(tmp_lst := list(DATASET_DIR.glob("*/*/*.obj"))) == len(
-    list(DATASET_DIR.glob("*/*/*.json"))
-)
+assert len(tmp_lst := list(DATASET_DIR.glob("*/*/*.obj"))) == len(list(DATASET_DIR.glob("*/*/*.json")))
 total_len = len(tmp_lst)
 
 lower_pairs = zip(LOWER_DIR.glob("*/*.obj"), LOWER_DIR.glob("*/*.json"))
-assert len(tmp_lst := list(LOWER_DIR.glob("*/*.obj"))) == len(
-    list(LOWER_DIR.glob("*/*.json"))
-)
+assert len(tmp_lst := list(LOWER_DIR.glob("*/*.obj"))) == len(list(LOWER_DIR.glob("*/*.json")))
 lower_len = len(tmp_lst)
 
 upper_pairs = zip(UPPER_DIR.glob("*/*.obj"), UPPER_DIR.glob("*/*.json"))
-assert len(tmp_lst := list(UPPER_DIR.glob("*/*.obj"))) == len(
-    list(UPPER_DIR.glob("*/*.json"))
-)
+assert len(tmp_lst := list(UPPER_DIR.glob("*/*.obj"))) == len(list(UPPER_DIR.glob("*/*.json")))
 upper_len = len(tmp_lst)
 
 import numpy as np
@@ -40,12 +34,10 @@ import vedo
 # %%
 import vtk
 
-
 def get_point_ids_by_point_label(mesh, label_num=0, FDI=False):
     labels = mesh.pointdata["Labels"] if not FDI else mesh.pointdata["FDI"]
     index = np.where(labels == label_num)
     return index[0]
-
 
 def get_cell_ids_by_point_index(mesh, indices):
     cell_ids = vtk.vtkIdList()
@@ -57,7 +49,6 @@ def get_cell_ids_by_point_index(mesh, indices):
         for j in range(cell_ids.GetNumberOfIds()):
             result.append(cell_ids.GetId(j))
     return result
-
 
 def get_cell_ids_by_point_label(mesh, label_num=0, FDI=False):
     cell_ids = vtk.vtkIdList()
@@ -71,7 +62,6 @@ def get_cell_ids_by_point_label(mesh, label_num=0, FDI=False):
             result.append(cell_ids.GetId(j))
     return result
 
-
 def generate_cell_labels_from_point_label(mesh, FDI=False):
     cell_labels = np.zeros(mesh.ncells, dtype=np.uint8)
     if not FDI:
@@ -82,12 +72,10 @@ def generate_cell_labels_from_point_label(mesh, FDI=False):
             cell_labels[get_cell_ids_by_point_label(mesh, i, FDI)] = i
     return cell_labels
 
-
 def crop_cells_by_point_label(mesh: vedo.Mesh, label_num=0, FDI=False):
     labels = mesh.pointdata["Label"] if not FDI else mesh.pointdata["FDI"]
     ids = np.where(labels != label_num)
     return mesh.clone(deep=True).delete_cells_by_point_index(ids)
-
 
 # %%
 obj, info = list(total_pairs)[0]
@@ -101,12 +89,7 @@ mesh = vedo.Mesh(str(obj))
 info_df = pd.read_json(str(info))
 fdi_label_map = dict(
     zip(
-        (
-            tmp_group := info_df.copy()
-            .groupby(["labels", "instances"])
-            .size()
-            .reset_index()
-        )["labels"],
+        (tmp_group := info_df.copy().groupby(["labels", "instances"]).size().reset_index())["labels"],
         tmp_group["instances"],
     )
 )
@@ -130,7 +113,6 @@ elif len(quad1) == 0 and len(quad2) == 0:
 else:
     raise Exception("Check metadata!")
 
-
 # %%
 def remap(arr, cdict: dict) -> int:
     """Trimesh use only (for visualization)"""
@@ -138,7 +120,6 @@ def remap(arr, cdict: dict) -> int:
         if (v == arr).all():
             return k
     return 0
-
 
 import plotly.colors as pc
 
@@ -152,10 +133,7 @@ gum_color = "#A0A0A0"
 #     len(cmap) > len(arranged) - 1
 # ), "Cannot assign each label type with a unique color."
 
-fdi_cmap_dict = {
-    fdi: trimesh.visual.color.hex_to_rgba(cmap[idx % len(cmap)])
-    for idx, fdi in enumerate(arranged[1:])
-}
+fdi_cmap_dict = {fdi: trimesh.visual.color.hex_to_rgba(cmap[idx % len(cmap)]) for idx, fdi in enumerate(arranged[1:])}
 fdi_cmap_dict[0] = trimesh.visual.color.hex_to_rgba(gum_color)
 fdi_pts_color = np.array([fdi_cmap_dict[i] for i in mesh.pointdata["FDI"]])
 fdi_pts_color = fdi_pts_color.astype(np.float64)[:, :-1]

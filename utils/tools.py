@@ -4,7 +4,6 @@ import numpy as np
 import open3d as o3d
 from numpy.typing import NDArray
 
-
 def normalize(
     input_pts: NDArray[Any],
     type: str = Literal["xyz", "cell_centers"],
@@ -18,12 +17,9 @@ def normalize(
     elif type == "cell_centers":
         _min = input_pts.min(axis=0) if ref is None else ref.min(axis=0)
         _max = input_pts.max(axis=0) if ref is None else ref.max(axis=0)
-        return np.apply_along_axis(
-            lambda x: (x - _min) / (_max - _min), axis=1, arr=input_pts
-        )
+        return np.apply_along_axis(lambda x: (x - _min) / (_max - _min), axis=1, arr=input_pts)
     else:
         raise NotImplementedError
-
 
 def cleanup(mesh: o3d.geometry.TriangleMesh) -> o3d.geometry.TriangleMesh:
     tmp = mesh.remove_degenerate_triangles()
@@ -33,10 +29,19 @@ def cleanup(mesh: o3d.geometry.TriangleMesh) -> o3d.geometry.TriangleMesh:
     result = tmp.remove_unreferenced_vertices()
     return result
 
-
-def decimate_o3d(
-    mesh: o3d.geometry, face_count: int = 10000
-) -> o3d.geometry.TriangleMesh:
+def decimate_o3d(mesh: o3d.geometry, face_count: int = 10000) -> o3d.geometry.TriangleMesh:
     while np.asarray(mesh.triangles).shape[0] != face_count:
         mesh = mesh.subdivide_midpoint(1).simplify_quadric_decimation(face_count)
     return mesh
+
+def count_channels(input_list):
+    result = 0
+    if "xyz" in input_list:
+        result += 3
+    if "xyz3" in input_list:
+        result += 9
+    if "norm" in input_list:
+        result += 3
+    if "norm3" in input_list:
+        result += 9
+    return result

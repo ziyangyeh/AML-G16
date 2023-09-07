@@ -8,31 +8,21 @@ from omegaconf import OmegaConf
 from torch.optim import *
 from torch.optim.lr_scheduler import *
 
-from models import TFuseNet
-from external import PointNet, PointNet2, PointNet2_msg
+from models import build_model_from_cfg
 
 class LitModule(pl.LightningModule):
-    def __init__(self, cfg_train_params: OmegaConf, cfg_model: OmegaConf) -> None:
+    def __init__(self, cfg: OmegaConf) -> None:
         super(LitModule, self).__init__()
-        self.cfg_train = cfg_train_params
-        self.cfg_model = cfg_model
-
-        self.model = iMeshSegNet(
-            num_classes=self.cfg_model.num_classes,
-            num_channels=self.cfg_model.num_channels,
-            with_dropout=self.cfg_model.with_dropout,
-            dropout_p=self.cfg_model.dropout,
-        )
+        self.cfg = cfg
+        self.model = build_model_from_cfg(self.cfg.model.name)
         self.dice_fn = GeneralizedDiceLoss(to_onehot_y=True, softmax=True)
         self.lovasz_fn = LovaszSoftmax()
         self.ce_fn = nn.CrossEntropyLoss()
 
-        self.save_hyperparameters()
-
+        self.save_hyperparameters(ignore=["cfg"])
     def forward(self, X: Dict[str, torch.Tensor]) -> torch.Tensor:
         outputs = self.model(X["input"], X["KG_12"], X["KG_6"])
         return outputs
-
     def configure_optimizers(self):
         optimizer = AdamW(
             self.parameters(),
@@ -46,30 +36,19 @@ class LitModule(pl.LightningModule):
             gamma=self.cfg_train.gamma,
         )
         return {"optimizer": optimizer, "lr_scheduler": scheduler}
-
-    def training_step(
-        self, batch: Dict[str, torch.Tensor], batch_idx: int
-    ) -> torch.Tensor:
+    def training_step(self, batch: Dict[str, torch.Tensor], batch_idx: int) -> torch.Tensor:
         return self._step(batch, "train")
-
-    def validation_step(
-        self, batch: Dict[str, torch.Tensor], batch_idx: int
-    ) -> torch.Tensor:
+    def validation_step(self, batch: Dict[str, torch.Tensor], batch_idx: int) -> torch.Tensor:
         return self._step(batch, "val")
-
     def test_step(self, batch: Dict[str, torch.Tensor], batch_idx: int) -> torch.Tensor:
         return self._step(batch, "test")
-    
     def predict_step(self, batch: Dict[str, torch.Tensor], batch_idx: int) -> torch.Tensor:
         return self(batch).transpose(2, 1).softmax(dim=-1)
-    
     def _step(self, batch: Dict[str, torch.Tensor], step: str) -> torch.Tensor:
         outputs = self(batch)
 
         class_weights = torch.ones(self.cfg_model.num_classes, device=self.device)
-        one_hot_labels = nn.functional.one_hot(
-            batch["label"][:, 0, :], num_classes=self.cfg_model.num_classes
-        )
+        one_hot_labels = nn.functional.one_hot(batch["label"][:, 0, :], num_classes=self.cfg_model.num_classes)
 
         dice_loss = self.dice_fn(outputs, batch["label"])
         self.log(f"{step}_dice_loss", dice_loss, sync_dist=True)

@@ -1,0 +1,16 @@
+model:
+  NAME: ext.PointNet
+  num_classes: 17
+  dims: 100
+train:
+
+dataset:
+  jaw: upper
+  image: False
+  depth: False
+  decimated: True
+  mesh_feature_select: [xyz,norm]
+  transform: False
+dataloader:
+  batch_size: 16
+  num_workers: 8

@@ -6,7 +6,6 @@ import open3d as o3d
 from numpy.typing import NDArray
 from scipy.spatial.transform import Rotation as R
 
-
 def get_6_faces_rotation_matrix():
     rot_params = {"x": [0, 90, 180, 270], "y": [90, 180]}
     lst = []
@@ -14,7 +13,6 @@ def get_6_faces_rotation_matrix():
         for v in rot_params[k]:
             lst.append((k, v))
     return lst
-
 
 def render_image_and_depth(
     input_mesh: o3d.geometry.TriangleMesh,
@@ -25,9 +23,7 @@ def render_image_and_depth(
     height: int = None,
     material: str = "defaultLitTransparency",
 ) -> dict[str, NDArray[Any]]:
-    renderer = o3d.visualization.rendering.OffscreenRenderer(
-        width, height if height else width
-    )
+    renderer = o3d.visualization.rendering.OffscreenRenderer(width, height if height else width)
     mat = o3d.visualization.rendering.MaterialRecord()
     mat.shader = material
 
