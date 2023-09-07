@@ -1,6 +1,9 @@
+from typing import Any
+
 import cv2
 import numpy as np
 import open3d as o3d
+from numpy.typing import NDArray
 from scipy.spatial.transform import Rotation as R
 
 
@@ -21,7 +24,7 @@ def render_image_and_depth(
     width: int = 512,
     height: int = None,
     material: str = "defaultLitTransparency",
-) -> dict[str, np.ndarray[np.generic]]:
+) -> dict[str, NDArray[Any]]:
     renderer = o3d.visualization.rendering.OffscreenRenderer(
         width, height if height else width
     )

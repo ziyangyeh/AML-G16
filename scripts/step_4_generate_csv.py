@@ -2,46 +2,19 @@ from pathlib import Path
 
 import pandas as pd
 
-# Fixed path "Teeth3DS" in repository root.
-DATASET_DIR = Path("Teeth3DS")
+DATASET_DIR = Path("formatted_data")
 
-LOWER_DIR = DATASET_DIR / Path("lower")
-UPPER_DIR = DATASET_DIR / Path("upper")
+ID_GLOB = list(DATASET_DIR.glob("*/*/*"))
 
-total_pairs = zip(DATASET_DIR.glob("*/*/*.obj"), DATASET_DIR.glob("*/*/*.json"))
-assert len(tmp_lst := list(DATASET_DIR.glob("*/*/*.obj"))) == len(
-    list(DATASET_DIR.glob("*/*/*.json"))
-)
+result = {}
+for item in ID_GLOB:
+    _id = (splited := str(item).split("/"))[1]
+    _jaw = splited[2]
+    file_name = splited[-1].split(".")[0]
+    if _id in result.keys():
+        result[_id][f"{_jaw}_{file_name}"] = item
+    else:
+        result[_id] = {f"{_jaw}_{file_name}": item}
 
-lower_pairs = zip(
-    lower_obj := LOWER_DIR.glob("*/*.obj"), lower_json := LOWER_DIR.glob("*/*.json")
-)
-assert len(tmp_lst := list(LOWER_DIR.glob("*/*.obj"))) == len(
-    list(LOWER_DIR.glob("*/*.json"))
-)
-
-upper_pairs = zip(
-    upper_obj := UPPER_DIR.glob("*/*.obj"), upper_json := UPPER_DIR.glob("*/*.json")
-)
-assert len(tmp_lst := list(UPPER_DIR.glob("*/*.obj"))) == len(
-    list(UPPER_DIR.glob("*/*.json"))
-)
-
-_t = list(total_pairs)
-_dict = {
-    str(_obj).split("/")[-2]: {
-        "lower_obj": None,
-        "lower_json": None,
-        "upper_obj": None,
-        "upper_json": None,
-    }
-    for _obj, _ in _t
-}
-for _obj, _json in _t:
-    assert (_id := str(_obj).split("/")[-2]) == str(_json).split("/")[-2]
-    assert (_jaw := str(_obj).split("/")[-3]) == str(_json).split("/")[-3]
-    _dict[_id][f"{_jaw}_obj"] = str(_obj)
-    _dict[_id][f"{_jaw}_json"] = str(_json)
-
-dataset_df = pd.DataFrame().from_dict(_dict, orient="index").reset_index(names="id")
-dataset_df.to_csv("teeth3ds.csv", index=False)
+result_df = pd.DataFrame().from_dict(result, orient="index").reset_index(names="id")
+result_df.to_csv("formatted_data/teeth3ds.csv", index=False)
