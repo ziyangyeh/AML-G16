@@ -1,6 +1,6 @@
 import torch.nn as nn
 
-from .build import MODELS
+from .build_models import MODELS
 
 @MODELS.register_module()
 class TFuseNet(nn.Module):

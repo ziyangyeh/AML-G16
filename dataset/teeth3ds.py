@@ -16,7 +16,7 @@ class Teeth3DS(Dataset):
     def __init__(
         self,
         dataframe: pd.DataFrame,
-        jaw: Literal["upper", "lower", None] = None,
+        jaw: Literal["upper", "lower", "both"] = "both",
         image: bool = True,
         depth: bool = True,
         decimated: bool = True,
@@ -37,7 +37,7 @@ class Teeth3DS(Dataset):
         self.xyz3 = True if "xyz3" in mesh_feature_select else False
         self.norm = True if "norm" in mesh_feature_select else False
         self.norm3 = True if "norm3" in mesh_feature_select else False
-    def len(self):
+    def __len__(self):
         return len(self.dataframe)
     def __getitem__(self, index):
         # IMAGE PIPELINE
@@ -101,15 +101,15 @@ class Teeth3DS(Dataset):
 
         # Labels to one-hot
         labels = torch.tensor(mesh.celldata["Labels"], device=torch.device("cpu"))
-        labels = one_hot(labels, num_classes=self.number_classes)
+        labels = one_hot(labels, num_classes=self.number_classes).numpy()
 
         # Meger modalities
         if self.c != 0:
-            image_dict["feats"] = feats
+            image_dict["x"] = feats
             image_dict["labels"] = labels
             return image_dict
         else:
-            return {"feats": feats, "labels": labels}
+            return {"x": feats.astype(np.float32), "labels": labels}
     def _select(self):
         if self.image:
             img_lst = sorted([i for i in self.dataframe.columns.values if "image" in i])
@@ -132,9 +132,8 @@ class Teeth3DS(Dataset):
         depth: bool,
         decimated: bool,
     ):
-        if jaw:
+        if jaw != "both":
             selected = list(filter(lambda x: jaw in x, dataframe.columns.values))
-            selected.remove(f"{jaw}_mesh" if decimated else f"{jaw}_mesh_d")
             if not image:
                 selected = [i for i in selected if "image" not in i]
             if not depth:
@@ -149,10 +148,12 @@ class Teeth3DS(Dataset):
             if not depth:
                 upper = [i for i in upper if "depth" not in i]
                 lower = [i for i in lower if "depth" not in i]
-            upper_df = dataframe[upper]
-            lower_df = dataframe[lower]
-            result = pd.concat([upper_df, lower_df], ignore_index=True, axis=0)[upper].rename(columns=({k: v for k, v in zip(upper, [i[6:] for i in upper])})).drop(columns=["mesh" if decimated else "mesh_d"])
-        result.rename(columns={"mesh_d": "mesh"}, inplace=True)
+            upper_df = dataframe[upper].reset_index(drop=True).rename(columns=({k: v for k, v in zip(upper, [i[6:] for i in upper])}))
+            lower_df = dataframe[lower].reset_index(drop=True).rename(columns=({k: v for k, v in zip(lower, [i[6:] for i in lower])}))
+            result = pd.concat([upper_df, lower_df], ignore_index=True, axis=0)
+        if decimated:
+            result.drop(columns=["mesh"], inplace=True)
+            result.rename(columns={"mesh_d": "mesh"}, inplace=True)
         return result
 
 if __name__ == "__main__":

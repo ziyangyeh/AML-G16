@@ -1,12 +1,12 @@
 model:
-  NAME: ext.DGCNN_partseg
+  NAME: ext.DGCNN
   num_classes: 17
   emb_dims: 1000
   k: 6
   num_channels: 15
   dropout: 0
 train:
-
+  losses: []
 dataset:
   jaw: upper
   image: False

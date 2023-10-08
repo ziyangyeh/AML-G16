@@ -1,16 +1,35 @@
+seed: 42
 model:
   NAME: ext.PointNet
   num_classes: 17
-  dims: 100
 train:
-
+  epochs: 100
+  accelerator: gpu
+  devices: 1
+  ddp: False
+  precision: bf16
+  accumulate_grad_batches: 1
+  losses: [NLL]
+  metrics: #[mDice,mIoU]
+  optimizer: 
+    NAME: AdamW
+    lr: 1e-3
+    weight_decay: 1e-7
+  scheduler:
+    NAME: StepLR
+    step_size: 10
+    gamma: 0.5
 dataset:
-  jaw: upper
+  csv_path: formatted_data/teeth3ds.csv
+  train_val_ratio: 0.9
+  jaw: both
   image: False
   depth: False
   decimated: True
-  mesh_feature_select: [xyz,norm]
+  mesh_feature_select: [xyz,xyz3,norm]
   transform: False
 dataloader:
-  batch_size: 16
+  batch_size: 96
   num_workers: 8
+logger:
+  log_every_n_steps: 5
