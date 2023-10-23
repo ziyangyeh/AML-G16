@@ -1,19 +1,35 @@
+seed: 42
 model:
   NAME: ext.DGCNN
   num_classes: 17
-  emb_dims: 1000
-  k: 6
-  num_channels: 15
-  dropout: 0
 train:
-  losses: []
+  epochs: 50
+  accelerator: gpu
+  devices: 1
+  ddp: False
+  precision: 16-mixed
+  accumulate_grad_batches: 1
+  losses: [Dice,Lovasz,CE]
+  losses_weights: [0.6,0.3,0.1]
+  optimizer: 
+    NAME: AdamW
+    lr: 1e-3
+    weight_decay: 1e-7
+  scheduler:
+    NAME: StepLR
+    step_size: 10
+    gamma: 0.75
 dataset:
-  jaw: upper
+  csv_path: formatted_data/teeth3ds.csv
+  train_val_ratio: 0.8
+  jaw: both
   image: False
   depth: False
   decimated: True
-  mesh_feature_select: [xyz]
+  mesh_feature_select: [xyz,xyz3,norm,norm3]
   transform: False
 dataloader:
-  batch_size: 16
+  batch_size: 4
   num_workers: 8
+logger:
+  log_every_n_steps: 5

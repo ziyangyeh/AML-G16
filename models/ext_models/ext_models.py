@@ -2,7 +2,9 @@ import os
 import sys
 
 import torch
+import torch.nn as nn
 import torch.nn.functional as F
+from einops import rearrange, parse_shape
 
 from utils import Registry
 
@@ -18,6 +20,18 @@ class PointNet(PointNet):
             self.k = kwargs["k"]
             self.conv4 = torch.nn.Conv1d(128, self.k, 1)
         self.feat = PointNetEncoder(global_feat=False, feature_transform=True, channel=kwargs["channel"])
+    def forward(self, x):
+        batchsize = x.size()[0]
+        n_pts = x.size()[2]
+        x, trans, trans_feat = self.feat(x)
+        x = F.relu(self.bn1(self.conv1(x)))
+        x = F.relu(self.bn2(self.conv2(x)))
+        x = F.relu(self.bn3(self.conv3(x)))
+        x = self.conv4(x)
+        x = x.transpose(2, 1).contiguous()
+        x = F.softmax(x.view(-1, self.k), dim=-1)
+        x = x.view(batchsize, n_pts, self.k)
+        return x, trans_feat
 
 @EXT_MODELS.register_module()
 class PointNet2(PointNet2):
@@ -48,7 +62,13 @@ class PointNet2(PointNet2):
 class PointNet2_MSG(PointNet2_msg):
     def __init__(self, **kwargs):
         super(PointNet2_MSG, self).__init__(kwargs["num_classes"])
-        self.sa1 = PointNetSetAbstractionMsg(kwargs["npoints"], [0.05, 0.1], [16, 32], kwargs["channel"], [[16, 16, 32], [32, 32, 64]])
+        self.sa1 = PointNetSetAbstractionMsg(
+            kwargs["npoints"],
+            [0.05, 0.1],
+            [16, 32],
+            kwargs["channel"],
+            [[16, 16, 32], [32, 32, 64]],
+        )
         self.sa2 = PointNetSetAbstractionMsg(256, [0.1, 0.2], [16, 32], 32 + 64, [[64, 64, 128], [64, 96, 128]])
         self.sa3 = PointNetSetAbstractionMsg(64, [0.2, 0.4], [16, 32], 128 + 128, [[128, 196, 256], [128, 196, 256]])
         self.sa4 = PointNetSetAbstractionMsg(16, [0.4, 0.8], [16, 32], 256 + 256, [[256, 256, 512], [256, 384, 512]])
@@ -72,9 +92,17 @@ class PointNet2_MSG(PointNet2_msg):
 @EXT_MODELS.register_module()
 class DGCNN(DGCNN_semseg_scannet):
     def __init__(self, **kwargs):
-        if not kwargs["xyz"]:
-            raise Exception("feats should contain 'xyz' only")
-        super(DGCNN, self).__init__(kwargs["num_classes"], kwargs["k"], kwargs["emb_dims"], kwargs["dropout"])
+        super(DGCNN, self).__init__(
+            kwargs["num_classes"],
+            kwargs["k"] if "k" in kwargs.keys() else 20,
+            kwargs["emb_dims"] if "emb_dims" in kwargs.keys() else 1024,
+            kwargs["dropout"] if "dropout" in kwargs.keys() else 0.5,
+        )
+        self.conv1 = nn.Sequential(
+            nn.Conv2d(kwargs["channel"] * 2, 64, kernel_size=1, bias=False),
+            self.bn1,
+            nn.LeakyReLU(negative_slope=0.2),
+        )
     def forward(self, x):
         npoint = x.size(2)
         x = get_graph_feature(x, k=self.k, dim9=False)
@@ -97,7 +125,10 @@ class DGCNN(DGCNN_semseg_scannet):
         x = self.conv8(x)
         x = self.dp1(x)
         x = self.conv9(x)
-        # x = x.transpose(2, 1).contiguous()
+        x = x.transpose(2, 1).contiguous()
+        x_shape = parse_shape(x,"b n c")
+        x = F.softmax(x.view(-1, x_shape["c"]), dim=-1)
+        x = rearrange(x, "(b n) c -> b n c", **x_shape)
         return x, None
 
 @EXT_MODELS.register_module()

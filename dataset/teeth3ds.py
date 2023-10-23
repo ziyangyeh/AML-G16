@@ -126,7 +126,12 @@ class Teeth3DS(Dataset):
                 images = rearrange(np.asarray(list(image_dict.values())), "n h w c -> n c h w")
             else:
                 images = rearrange(np.asarray(list(image_dict.values())), "n h w-> n () h w")
-            return {"x": feats.astype(np.float32), "labels": labels, "onehot": onehot, "images": images}
+            return {
+                "x": feats.astype(np.float32),
+                "labels": labels,
+                "onehot": onehot,
+                "images": images,
+            }
         return {
             "x": feats.astype(np.float32),
             "labels": labels,

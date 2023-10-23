@@ -8,7 +8,11 @@ class GraphAttention(nn.Module):
     def __init__(self, feature_dim, out_dim, K):
         super(GraphAttention, self).__init__()
         self.dropout = 0.6
-        self.conv = nn.Sequential(nn.Conv2d(feature_dim * 2, out_dim, kernel_size=1, bias=False), nn.BatchNorm2d(out_dim), nn.LeakyReLU(negative_slope=0.2))
+        self.conv = nn.Sequential(
+            nn.Conv2d(feature_dim * 2, out_dim, kernel_size=1, bias=False),
+            nn.BatchNorm2d(out_dim),
+            nn.LeakyReLU(negative_slope=0.2),
+        )
         self.K = K
     def forward(self, Graph_index, x, feature):
         B, C, N = x.shape

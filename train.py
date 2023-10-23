@@ -16,7 +16,12 @@ from models import LitModule
 
 torch.set_float32_matmul_precision("high")
 
-def train(cfg: OmegaConf, train_dataframe: Optional[pd.DataFrame] = None, val_test_dataframe: Optional[pd.DataFrame] = None, train_test: str = "train"):
+def train(
+    cfg: OmegaConf,
+    train_dataframe: Optional[pd.DataFrame] = None,
+    val_test_dataframe: Optional[pd.DataFrame] = None,
+    train_test: str = "train",
+):
     pl.seed_everything(cfg.seed)  # ENSURE REPRODUCIBILITY
 
     datamodule = LitDataModule(cfg=cfg, train_dataframe=train_dataframe, val_test_dataframe=val_test_dataframe)
@@ -33,18 +38,19 @@ def train(cfg: OmegaConf, train_dataframe: Optional[pd.DataFrame] = None, val_te
         verbose="True",
     )
 
-    # dsc_model_checkpoint = ModelCheckpoint(
-    #     dirpath=cfg.train.checkpoint_dir,
-    #     monitor="val_DSC",
-    #     mode="max",
-    #     filename=f"{module.model.__class__.__name__}_{cfg.model.num_classes}_Classes_{cfg.train.precision}_f_best_DSC",
-    #     verbose="True",
-    # )
+    dsc_model_checkpoint = ModelCheckpoint(
+        dirpath="checkpoints",
+        monitor="val_dice_metric",
+        mode="max",
+        filename=f"{cfg.model.NAME}_{cfg.model.num_classes}_classes_{cfg.train.precision}_f_best_dice",
+        verbose="True",
+    )
 
     trainer = pl.Trainer(
-        callbacks=[loss_model_checkpoint],  # dsc_model_checkpoint,
-        benchmark=False,  # ENSURE REPRODUCIBILITY
-        deterministic=True,  # ENSURE REPRODUCIBILITY
+        #fast_dev_run=True,
+        callbacks=[loss_model_checkpoint, dsc_model_checkpoint],
+        # benchmark=False,  # ENSURE REPRODUCIBILITY
+        # deterministic=True,  # ENSURE REPRODUCIBILITY
         accelerator=cfg.train.accelerator,
         devices=cfg.train.devices,
         strategy="ddp" if cfg.train.ddp else "auto",
