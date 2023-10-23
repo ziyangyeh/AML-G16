@@ -4,8 +4,24 @@ import pandas as pd
 import pytorch_lightning as pl
 from omegaconf import OmegaConf
 from torch.utils.data import DataLoader
-
+import vedo
+from utils import GetVTKTransformationMatrix
 from .teeth3ds import Teeth3DS
+
+def augment(mesh: vedo.Mesh):
+    vtk_matrix = GetVTKTransformationMatrix(
+        rotate_X=[-180, 180],
+        rotate_Y=[-180, 180],
+        rotate_Z=[-180, 180],
+        translate_X=[-10, 10],
+        translate_Y=[-10, 10],
+        translate_Z=[-10, 10],
+        scale_X=[0.8, 1.2],
+        scale_Y=[0.8, 1.2],
+        scale_Z=[0.8, 1.2],
+    )
+    mesh.apply_transform(vtk_matrix)
+    return mesh
 
 class LitDataModule(pl.LightningDataModule):
     def __init__(
@@ -22,8 +38,9 @@ class LitDataModule(pl.LightningDataModule):
         # self.path_size = cfg.patch_size
         self.batch_size = cfg.dataloader.batch_size
         self.num_workers = cfg.dataloader.num_workers
-        if not cfg.dataset.transform:
-            self.transform = None
+        self.transform = False
+        if cfg.dataset.transform:
+            self.transform = augment
 
         self.save_hyperparameters(ignore=["cfg", "train_dataframe", "val_test_dataframe"])
     def setup(self, stage: Optional[str] = None):
@@ -31,6 +48,7 @@ class LitDataModule(pl.LightningDataModule):
             self.train_dataset = Teeth3DS(
                 dataframe=self.train_dataframe,
                 num_classes=self.num_classes,
+                mesh_aug=self.transform,
                 **self.cfg.dataset,
             )
             self.val_dataset = Teeth3DS(

@@ -1,8 +1,8 @@
 from omegaconf import OmegaConf
-from utils import Registry,count_channels
+from utils import Registry, count_channels
 from .ext_models.ext_models import EXT_MODELS
 
-MODELS = Registry("models",parent=EXT_MODELS)
+MODELS = Registry("models", parent=EXT_MODELS)
 
 def _fix(cfg: OmegaConf):
     cfg.model.xyz = True if ["xyz"] == cfg.dataset.mesh_feature_select else False

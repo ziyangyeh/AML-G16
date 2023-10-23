@@ -6,8 +6,10 @@ import pandas as pd
 import torch
 import vedo
 from PIL import Image
+from einops import rearrange
 from torch.nn.functional import one_hot
 from torch.utils.data import Dataset
+import albumentations as A
 
 sys.path.insert(0, sys.path[0] + "/../")
 from utils import normalize
@@ -22,7 +24,8 @@ class Teeth3DS(Dataset):
         decimated: bool = True,
         mesh_feature_select: List[Literal["xyz", "xyz3", "norm", "norm3"]] = ["xyz"],
         number_classes: int = 17,  # Gum(1) + teeth(7*2) + wisdom teeh(1*2)
-        transform: Optional[Callable] = None,
+        mesh_aug: Optional[Callable] = None,
+        image_aug: Optional[Callable] = None,
         **kwargs,
     ) -> None:
         super(Teeth3DS, self).__init__()
@@ -30,7 +33,8 @@ class Teeth3DS(Dataset):
         self.image = image
         self.depth = depth
         self.rgbd = image and depth
-        self.transform = transform
+        self.transform = mesh_aug
+        self.image_aug = image_aug if image_aug else A.Normalize()
         self.c, self.cols = self._select()
         self.number_classes = number_classes
         self.xyz = True if "xyz" in mesh_feature_select else False
@@ -51,20 +55,33 @@ class Teeth3DS(Dataset):
                         self.dataframe.columns.get_loc(_depth),
                     ],
                 ]
-                image_dict[f"image_{idx}"] = np.concatenate(
+                img = Image.open(cur_img)
+                depth = np.load(cur_dep)
+                auged = self.image_aug(image=np.asarray(img), mask=depth)
+                img = np.concatenate(
                     [
-                        np.asarray(Image.open(cur_img)),
-                        np.expand_dims(np.load(cur_dep), axis=-1),
+                        auged["image"],
+                        np.expand_dims(auged["mask"], axis=-1),
                     ],
                     axis=-1,
                 )
+                image_dict[f"image_{idx}"] = img
         elif self.c == 3 or self.c == 1:
             for idx, _item in enumerate(self.cols):
                 cur = self.dataframe.iloc[index, self.dataframe.columns.get_loc(_item)]
-                image_dict[f"image_{idx}"] = np.asarray(Image.open(cur)) if self.c == 3 else np.load(cur)
+                img = np.asarray(Image.open(cur)) if self.c == 3 else np.load(cur)
+                if self.c != 1:
+                    auged = self.image_aug(image=img)
+                    image_dict[f"image_{idx}"] = auged["image"]
+                else:
+                    image_dict[f"image_{idx}"] = img
 
         # MESH PIPELINE
         mesh = vedo.Mesh(self.dataframe.iloc[index, self.dataframe.columns.get_loc("mesh")])
+
+        if self.transform:
+            mesh = self.transform(mesh)
+
         # Traslate into origin.
         mesh.points(mesh.points() - mesh.center_of_mass())
         # Get translated points
@@ -101,15 +118,20 @@ class Teeth3DS(Dataset):
 
         # Labels to one-hot
         labels = torch.tensor(mesh.celldata["Labels"], device=torch.device("cpu"))
-        labels = one_hot(labels, num_classes=self.number_classes).numpy()
+        onehot = one_hot(labels, num_classes=self.number_classes).numpy()
 
-        # Meger modalities
+        # Combine modalities
         if self.c != 0:
-            image_dict["x"] = feats
-            image_dict["labels"] = labels
-            return image_dict
-        else:
-            return {"x": feats.astype(np.float32), "labels": labels}
+            if self.c != 1:
+                images = rearrange(np.asarray(list(image_dict.values())), "n h w c -> n c h w")
+            else:
+                images = rearrange(np.asarray(list(image_dict.values())), "n h w-> n () h w")
+            return {"x": feats.astype(np.float32), "labels": labels, "onehot": onehot, "images": images}
+        return {
+            "x": feats.astype(np.float32),
+            "labels": labels,
+            "onehot": onehot,
+        }
     def _select(self):
         if self.image:
             img_lst = sorted([i for i in self.dataframe.columns.values if "image" in i])

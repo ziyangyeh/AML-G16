@@ -1,0 +1,37 @@
+seed: 42
+model:
+  NAME: TFuseNet
+  num_classes: 17
+  dropout: 0.5
+train:
+  epochs: 50
+  accelerator: gpu
+  devices: 1
+  ddp: False
+  precision: 16-mixed #bf16-mixed
+  accumulate_grad_batches: 4
+  losses: [Dice,Lovasz,CE]
+  losses_weights: [0.4,0.4,0.2]
+  metrics: [Dice,Recall,Specificity,Hausdorff]
+  optimizer: 
+    NAME: AdamW
+    lr: 1e-3
+    weight_decay: 1e-7
+  scheduler:
+    NAME: StepLR
+    step_size: 10
+    gamma: 0.5
+dataset:
+  csv_path: formatted_data/teeth3ds.csv
+  train_val_ratio: 0.8
+  jaw: both
+  image: True
+  depth: True
+  decimated: True
+  mesh_feature_select: [xyz,xyz3,norm,norm3]
+  transform: False
+dataloader:
+  batch_size: 8
+  num_workers: 8
+logger:
+  log_every_n_steps: 5

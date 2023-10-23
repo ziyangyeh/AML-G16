@@ -1,19 +1,17 @@
-import importlib
 import inspect
 from typing import Callable, Dict, List, Optional, Tuple
 
 import pytorch_lightning as pl
 import torch
 import torch.nn as nn
-import torchmetrics
+from torchmetrics.classification import Dice, Recall, Specificity, F1Score
 from einops import rearrange
 from omegaconf import OmegaConf
 from torch.optim import *
 from torch.optim.lr_scheduler import *
 
 from .build_models import build_model_from_omegaconf
-from criterion.build_losses_metrics import (build_loss_from_omegaconf,
-                                            build_metrics_from_omegaconf)
+from criterion.build_losses import LOSSES
 
 class LitModule(pl.LightningModule):
     def __init__(self, cfg: OmegaConf, train_test: str) -> None:
@@ -21,15 +19,19 @@ class LitModule(pl.LightningModule):
         self.cfg = cfg
         self.model = build_model_from_omegaconf(cfg)
         self.forward_paramlist = [name for name, _ in inspect.signature(self.model.forward).parameters.items()]
-        self.losses = build_loss_from_omegaconf(cfg[train_test])
-        self.losses_weights = [1 / len(self.losses)] * len(self.losses) if "losses_weights" not in cfg.train.keys() else cfg.train.losses_weights
-        if cfg[train_test].metrics:
-            self.metrics = build_metrics_from_omegaconf(cfg[train_test])
-            self.acc_fn = torchmetrics.Accuracy(task="multiclass", num_classes=cfg.model.num_classes)
-            self.metrics.update({"Accuracy": self.acc_fn})
-        else:
-            self.metrics=None
+        self.loss_lst = []
+        for name in cfg[train_test].losses:
+            setattr(self, f'{name.lower()}_fn', LOSSES.build(dict(NAME=name) if name != "Dice" else dict(NAME=name, to_onehot_y=True)))
+            self.loss_lst.append(f"{name.lower()}_fn")
+        self.losses_weights = [1 / len(cfg[train_test].losses)] * len(cfg[train_test].losses) if "losses_weights" not in cfg.train.keys() else cfg.train.losses_weights
+        
+        self.dice_metric = Dice(multiclass=True, num_classes=cfg.model.num_classes)
+        self.recall_metric = Recall(task="multiclass", num_classes=cfg.model.num_classes)
+        self.specificity_metric = Specificity(task="multiclass", num_classes=cfg.model.num_classes)
+        self.F1_metric = F1Score(task="multiclass", num_classes=cfg.model.num_classes)
+        self.metric_lst = [("dice",self.dice_metric),("recall",self.recall_metric),("specificity",self.specificity_metric),("f1",self.F1_metric)]
         self.save_hyperparameters(ignore=["cfg"])
+    
     def forward(self, X: Dict[str, torch.Tensor]) -> torch.Tensor:
         _input = {k: v for k, v in X.items() if k in self.forward_paramlist}
         _input["x"] = rearrange(_input["x"], "b n c -> b c n")
@@ -59,24 +61,22 @@ class LitModule(pl.LightningModule):
     def _step(self, batch: Dict[str, torch.Tensor], step: str) -> torch.Tensor:
         outputs = self(batch)
         outputs = outputs[0] if isinstance(outputs, tuple) else outputs
-        outputs_m = outputs.clone()
+        # outputs_m = outputs.clone()
+        outputs_m = batch["onehot"].clone().float()
         loss_lst = []
-        for w, (name, loss_fn) in zip(self.losses_weights, self.losses.items()):
-            if name=="NLL":
-                outputs = rearrange(outputs, "b n c -> (b n c)")
-                labels = rearrange(batch["labels"], "b n c -> (b n c)")
-                _loss = w * loss_fn(outputs, labels)
+        for name, w in zip(self.loss_lst, self.losses_weights):
+            loss_fn = getattr(self,name)
+            if name == "Dice":
+                _loss = w * loss_fn(rearrange(outputs, "b n c -> b c n"), batch["labels"].unsqueeze(1))
             else:
-                _loss = w * loss_fn(outputs, batch["labels"])
+                _loss = w * loss_fn(rearrange(outputs, "b n c -> (b n) c"), rearrange(batch["labels"], "b n ->(b n)"))
             loss_lst.append(_loss)
-            if len(loss_lst) > 1:
-                self.log(f"{step}_{name}_loss", _loss, sync_dist=True)
-        loss = loss_lst[0] if len(loss_lst) == 1 else torch.stack([loss_lst]).sum()
+            self.log(f"{step}_{name}_loss", _loss, sync_dist=True)
+        loss = torch.stack(loss_lst).sum()
         self.log(f"{step}_loss", loss, sync_dist=True, prog_bar=True)
-        
-        if self.metrics:
-            with torch.no_grad():
-                for name, metric_fn in self.metrics.items():
-                    _metric = metric_fn(outputs_m, batch["labels"])
-                    self.log(f"{step}_{name}", _metric.mean(), sync_dist=True)
+
+        with torch.no_grad():
+            for name, metric_fn in self.metric_lst:
+                _metric = metric_fn(rearrange(outputs_m, "b n c -> (b n) c"), rearrange(batch["labels"], "b n ->(b n)"))
+            self.log(f"{step}_{name}", _metric, sync_dist=True)
         return loss

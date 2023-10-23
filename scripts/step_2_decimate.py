@@ -31,5 +31,5 @@ if __name__ == "__main__":
     DATASET_DIR = Path("formatted_data")
     vtp_lst = list(DATASET_DIR.glob("*/*/*.vtp"))
 
-    # loky backend courses memory leak.
+    # loky backend causes memory leak.
     Parallel(n_jobs=cpu_count(), backend="multiprocessing")(delayed(decimate_with_label)(vtp_file, args.number) for vtp_file in tqdm(vtp_lst, total=len(vtp_lst)))
