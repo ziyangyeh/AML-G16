@@ -32,6 +32,4 @@ if __name__ == "__main__":
     vtp_lst = list(DATASET_DIR.glob("*/*/*.vtp"))
 
     # loky backend causes memory leak.
-    Parallel(n_jobs=cpu_count(), backend="multiprocessing")(
-        delayed(decimate_with_label)(vtp_file, args.number) for vtp_file in tqdm(vtp_lst, total=len(vtp_lst))
-    )
+    Parallel(n_jobs=cpu_count(), backend="multiprocessing")(delayed(decimate_with_label)(vtp_file, args.number) for vtp_file in tqdm(vtp_lst, total=len(vtp_lst)))

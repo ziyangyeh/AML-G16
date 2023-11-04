@@ -2,8 +2,8 @@ from typing import Any, Literal, Optional
 
 import numpy as np
 import open3d as o3d
-from numpy.typing import NDArray
 import vtk
+from numpy.typing import NDArray
 from vedo import *
 
 def GetVTKTransformationMatrix(

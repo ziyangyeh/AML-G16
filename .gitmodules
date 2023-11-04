@@ -1,32 +1,7 @@
-[submodule "external/MeshSegNet"]
-	path = external/MeshSegNet
-	url = git@github.com:ziyangyeh/MeshSegNet.git
-	ignore = dirty
-[submodule "external/iMeshSegNet"]
-	path = external/iMeshSegNet
-	url = git@github.com:ziyangyeh/iMeshSegNet.git
-	ignore = dirty
-[submodule "external/openpoints"]
-	path = external/openpoints
+[submodule "openpoints"]
+	path = openpoints
 	url = git@github.com:guochengqian/openpoints.git
 	ignore = dirty
-[submodule "external/TSGCNet"]
-	path = external/TSGCNet
-	url = git@github.com:ZhangLingMing1/TSGCNet.git
-	ignore = dirty
-[submodule "external/ToothGroupNetwork"]
-	path = external/ToothGroupNetwork
-	url = git@github.com:limhoyeon/ToothGroupNetwork.git
-	ignore = dirty
-[submodule "external/Pointcept"]
-	path = external/Pointcept
+[submodule "Pointcept"]
+	path = Pointcept
 	url = git@github.com:Pointcept/Pointcept.git
-	ignore = dirty
-[submodule "external/Pointnet_Pointnet2_pytorch"]
-	path = external/Pointnet_Pointnet2_pytorch
-	url = git@github.com:yanx27/Pointnet_Pointnet2_pytorch.git
-	ignore = dirty
-[submodule "external/dgcnn_pytorch"]
-	path = external/dgcnn_pytorch
-	url = git@github.com:antao97/dgcnn.pytorch.git
-	ignore = dirty

@@ -15,9 +15,11 @@ def get_graph_feature(x, k=20, idx=None, dim9=False):
         if dim9 == False:
             idx = knn(x, k=k)  # (batch_size, num_points, k)
         else:
-            idx = knn(x[:, 6:], k=k)
-    device = torch.device("cuda")
-    index = idx
+            idx = knn(x, k=k)
+            # idx = knn(x[:, 6:], k=k)
+            # idx = knn(x[:, 6:], k=k)
+    device = x.device
+
     idx_base = torch.arange(0, batch_size, device=device).view(-1, 1, 1) * num_points
 
     idx = idx + idx_base
@@ -26,25 +28,21 @@ def get_graph_feature(x, k=20, idx=None, dim9=False):
 
     _, num_dims, _ = x.size()
 
-    x = x.transpose(
-        2, 1
-    ).contiguous()  # (batch_size, num_points, num_dims)  -> (batch_size*num_points, num_dims) #   batch_size * num_points * k + range(0, batch_size*num_points)
+    x = x.transpose(2, 1).contiguous()  # (batch_size, num_points, num_dims)  -> (batch_size*num_points, num_dims) #   batch_size * num_points * k + range(0, batch_size*num_points)
     feature = x.view(batch_size * num_points, -1)[idx, :]
     feature = feature.view(batch_size, num_points, k, num_dims)
     x = x.view(batch_size, num_points, 1, num_dims).repeat(1, 1, k, 1)
 
     feature = torch.cat((feature - x, x), dim=3).permute(0, 3, 1, 2).contiguous()
 
-    return feature, index  # (batch_size, 2*num_dims, num_points, k)
+    return feature  # (batch_size, 2*num_dims, num_points, k)
 
 def get_graph_feature_pair(coor, nor, k=10):
     batch_size, num_dims, num_points = coor.shape
     coor = coor.view(batch_size, -1, num_points)
 
-    idx = knn(coor, k=k)
+    idx = knn(coor, k)
     index = idx
-
-    assert coor.device == nor.device
     device = coor.device
 
     idx_base = torch.arange(0, batch_size, device=device).view(-1, 1, 1) * num_points

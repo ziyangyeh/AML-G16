@@ -1,39 +1,39 @@
 seed: 42
 model:
-  NAME: ext.PointNet2
+  NAME: MeshSegNet
   num_classes: 17
-  emb_dims: 1000
-  k: 6
-  num_channels: 15
-  dropout: 0
 train:
-  epochs: 50
+  epochs: 70
   accelerator: gpu
   devices: 1
   ddp: False
-  precision: bf16
+  precision: bf16-mixed
   accumulate_grad_batches: 1
-  losses: [NLL]
+  losses: [Dice]
+  losses_weights: [1]
   optimizer: 
     NAME: AdamW
-    lr: 1e-4
-    weight_decay: 1e-7
+    lr: 1e-3
+    auto_lr: False
+    weight_decay: 1e-5
   scheduler:
-    NAME: StepLR
-    step_size: 10
-    gamma: 0.5
+    NAME: CosineAnnealingWarmRestarts
+    T_0: 10
+    T_mult: 2
+    eta_min: 1e-9
 dataset:
   csv_path: formatted_data/teeth3ds.csv
-  train_val_ratio: 0.9
+  train_val_ratio: 0.8
   jaw: both
   image: False
   depth: False
   decimated: True
   mesh_feature_select: [xyz,xyz3,norm]
   transform: False
-  npoints: 10000
+  cached_A_S_L: True
 dataloader:
-  batch_size: 32
+  batch_size: 4
+  auto_batch: False
   num_workers: 4
 logger:
-  log_every_n_steps: 5
+  log_every_n_steps: 10

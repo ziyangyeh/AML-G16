@@ -35,6 +35,4 @@ if __name__ == "__main__":
 
     rmat_lst = get_6_faces_rotation_matrix()
 
-    Parallel(n_jobs=cpu_count())(
-        delayed(generate_image_and_depth)(vtp_file, rmat_lst, width=args.width, height=args.height) for vtp_file in tqdm(vtp_lst, total=len(vtp_lst))
-    )
+    Parallel(n_jobs=cpu_count())(delayed(generate_image_and_depth)(vtp_file, rmat_lst, width=args.width, height=args.height) for vtp_file in tqdm(vtp_lst, total=len(vtp_lst)))

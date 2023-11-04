@@ -2,15 +2,16 @@ import argparse
 import gc
 from typing import Optional
 
+import lightning.pytorch as pl
 import pandas as pd
-import pytorch_lightning as pl
 import torch
-import wandb
+from lightning.pytorch.callbacks.model_checkpoint import ModelCheckpoint
+from lightning.pytorch.loggers import WandbLogger
+from lightning.pytorch.tuner import Tuner
 from omegaconf import OmegaConf
-from pytorch_lightning.callbacks.model_checkpoint import ModelCheckpoint
-from pytorch_lightning.loggers import WandbLogger
 from sklearn.model_selection import KFold, train_test_split
 
+import wandb
 from dataset import LitDataModule
 from models import LitModule
 
@@ -21,6 +22,7 @@ def train(
     train_dataframe: Optional[pd.DataFrame] = None,
     val_test_dataframe: Optional[pd.DataFrame] = None,
     train_test: str = "train",
+    debug=False,
 ):
     pl.seed_everything(cfg.seed)  # ENSURE REPRODUCIBILITY
 
@@ -47,7 +49,7 @@ def train(
     )
 
     trainer = pl.Trainer(
-        #fast_dev_run=True,
+        fast_dev_run=debug,
         callbacks=[loss_model_checkpoint, dsc_model_checkpoint],
         # benchmark=False,  # ENSURE REPRODUCIBILITY
         # deterministic=True,  # ENSURE REPRODUCIBILITY
@@ -60,7 +62,13 @@ def train(
         logger=WandbLogger(project="TFuseNet", name=f"{cfg.model.NAME}-{cfg.train.precision}"),
         accumulate_grad_batches=cfg.train.accumulate_grad_batches,
     )
-
+    if debug == False:
+        if cfg.train.optimizer.auto_lr:
+            tuner = Tuner(trainer)
+            lr_finder = tuner.lr_find(module, datamodule=datamodule)
+            module.hparams.lr = lr_finder.suggestion()
+            if cfg.dataloader.auto_batch:
+                tuner.scale_batch_size(module, datamodule=datamodule, mode="power")
     trainer.fit(module, datamodule=datamodule)
 
 if __name__ == "__main__":
@@ -73,6 +81,12 @@ if __name__ == "__main__":
         help="configuration file",
         # default="config/default.yaml",
     )
+    parser.add_argument(
+        "-d",
+        "--debug",
+        action="store_true",
+        help="debug",
+    )
     args = parser.parse_args()
 
     cfg = OmegaConf.load(args.config_file)
@@ -81,7 +95,7 @@ if __name__ == "__main__":
     train_df.reset_index(drop=True, inplace=True)
     val_df.reset_index(drop=True, inplace=True)
 
-    train(cfg, train_df, val_df)
+    train(cfg, train_df, val_df, debug=args.debug)
 
     # for fold, (train_idx, valid_idx) in enumerate(
     #     KFold(n_splits=cfg.k_fold, random_state=cfg.seed, shuffle=True).split(dataframe)

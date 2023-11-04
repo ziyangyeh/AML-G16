@@ -1,20 +1,14 @@
-import torch.nn as nn
 import timm
 import torch
+import torch.nn as nn
 import torch.nn.functional as F
-from einops import rearrange, reduce, parse_shape, pack, unpack, repeat
-from .sub_models import (
-    get_graph_feature_pair,
-    GraphAttention,
-    GVAPatchEmbed,
-    PointTransformerV2Encoder,
-    PointTransformerV2Layer,
-    STNkd,
-    AttentionFusion,
-)
+from einops import pack, parse_shape, rearrange, reduce, repeat, unpack
 from pointops import knn_query
-from .build_models import MODELS
 
+from openpoints.models.backbone.pointnet import STN3d
+
+from .build_models import MODELS
+from .sub_models import AttentionFusion, GraphAttention, GVAPatchEmbed, PointTransformerV2Encoder, PointTransformerV2Layer, get_graph_feature_pair
 
 @MODELS.register_module()
 class TFuseNet(nn.Module):
@@ -24,16 +18,15 @@ class TFuseNet(nn.Module):
         img_enc_pretrained=True,
         k=8,
         img_channels=4,
-        feat_dims=24,
-        dropout=0.0,
+        num_channels=24,
+        dropout=0.5,
         num_classes=17,
         **kwargs,
     ) -> None:
         super(TFuseNet, self).__init__()
         self.k = k
-        self.num_classes = num_classes
-        self.fstn_c = STNkd(k=feat_dims // 2)
-        self.fstn_n = STNkd(k=feat_dims // 2)
+        self.fstn_c = STN3d(num_channels // 2)
+        self.fstn_n = STN3d(num_channels // 2)
 
         self.patch_embed = GVAPatchEmbed(
             in_channels=24,
@@ -113,25 +106,13 @@ class TFuseNet(nn.Module):
         self.graph_att2 = GraphAttention(feature_dim=32, out_dim=64, K=self.k)
         self.graph_att3 = GraphAttention(feature_dim=64, out_dim=128, K=self.k)
 
-        self.att_fusion1_1 = AttentionFusion(
-            depth=0, dim=64, latent_dim=64, cross_dim_head=32, latent_dim_head=32
-        )
-        self.att_fusion2_1 = AttentionFusion(
-            depth=0, dim=128, latent_dim=128, cross_dim_head=64, latent_dim_head=64
-        )
-        self.att_fusion3_1 = AttentionFusion(
-            depth=0, dim=256, latent_dim=256, cross_dim_head=128, latent_dim_head=128
-        )
+        self.att_fusion1_1 = AttentionFusion(depth=0, dim=64, latent_dim=64, cross_dim_head=32, latent_dim_head=32)
+        self.att_fusion2_1 = AttentionFusion(depth=0, dim=128, latent_dim=128, cross_dim_head=64, latent_dim_head=64)
+        self.att_fusion3_1 = AttentionFusion(depth=0, dim=256, latent_dim=256, cross_dim_head=128, latent_dim_head=128)
 
-        self.att_fusion1_2 = AttentionFusion(
-            depth=0, dim=64, latent_dim=64, cross_dim_head=32, latent_dim_head=32
-        )
-        self.att_fusion2_2 = AttentionFusion(
-            depth=0, dim=128, latent_dim=128, cross_dim_head=64, latent_dim_head=64
-        )
-        self.att_fusion3_2 = AttentionFusion(
-            depth=0, dim=256, latent_dim=256, cross_dim_head=128, latent_dim_head=128
-        )
+        self.att_fusion1_2 = AttentionFusion(depth=0, dim=64, latent_dim=64, cross_dim_head=32, latent_dim_head=32)
+        self.att_fusion2_2 = AttentionFusion(depth=0, dim=128, latent_dim=128, cross_dim_head=64, latent_dim_head=64)
+        self.att_fusion3_2 = AttentionFusion(depth=0, dim=256, latent_dim=256, cross_dim_head=128, latent_dim_head=128)
 
         self.feature_extractor = timm.create_model(
             model_name=img_enc,
@@ -182,10 +163,8 @@ class TFuseNet(nn.Module):
             pe_bias=False,
         )
 
-        self.att_fusion4 = AttentionFusion(
-            depth=0, dim=448, latent_dim=448, cross_dim_head=224, latent_dim_head=224
-        )
-        
+        self.att_fusion4 = AttentionFusion(depth=0, dim=448, latent_dim=448, cross_dim_head=224, latent_dim_head=224)
+
         self.pts_conv1d1 = nn.Sequential(
             nn.Conv1d(448, 256, 1, bias=False),
             nn.BatchNorm1d(256),
@@ -214,29 +193,40 @@ class TFuseNet(nn.Module):
             nn.Conv1d(256, 128, 1, bias=False),
             nn.BatchNorm1d(128),
             nn.LeakyReLU(negative_slope=0.2),
-            nn.Dropout(p=dropout),
+            nn.Dropout(dropout),
             nn.Conv1d(128, 64, 1, bias=False),
             nn.BatchNorm1d(64),
             nn.LeakyReLU(negative_slope=0.2),
             nn.Conv1d(64, num_classes, 1, bias=False),
         )
-
     def forward(self, x, images):
         feat_shape = parse_shape(x, "b c n")
 
         # backbone - pre
         p0 = rearrange(x[:, :3, :], "b c n -> (b n) c").contiguous()
         x0 = rearrange(x, "b c n -> (b n) c").contiguous()
-        o0 = torch.tensor([feat_shape["n"] * feat_shape["b"]], device=x.device)
+        o0 = torch.arange(1, feat_shape["b"] + 1, device=x.device, requires_grad=False) * feat_shape["n"]
         points = [p0, x0, o0]
         # GVA patch embed
         points = self.patch_embed(points)
         # stn coord&norm
         coord, norm = rearrange(x, "b (split c) n -> split b c n", split=2)
+
         trans_coord_feat = self.fstn_c(coord)
-        coord = torch.einsum("b c n, b c d -> b d n", coord, trans_coord_feat)
+        coord = rearrange(coord, "b c n -> b n c")
+        _feature = coord[:, :, 3:]
+        coord = coord[:, :, :3]
+        coord = torch.bmm(coord, trans_coord_feat)
+        coord = torch.cat([coord, _feature], dim=2)
+        coord = rearrange(coord, "b n c  -> b c n")
+
         trans_norm_feat = self.fstn_n(norm)
-        norm = torch.einsum("b c n, b c d -> b d n", norm, trans_norm_feat)
+        norm = rearrange(norm, "b c n -> b n c")
+        _feature = norm[:, :, 3:]
+        norm = norm[:, :, :3]
+        norm = torch.bmm(norm, trans_norm_feat)
+        norm = torch.cat([norm, _feature], dim=2)
+        norm = rearrange(norm, "b n c -> b c n")
 
         # image encoder
         img_shape = parse_shape(images, "b n c h w")
@@ -258,10 +248,7 @@ class TFuseNet(nn.Module):
             )
             for _feats in img_feats
         ]
-        img_feats_skip = [
-            self.flatten(self.img_feat_pool(rearrange(_feat, "b h w c -> b c h w")))
-            for _feat in img_feats
-        ]
+        img_feats_skip = [self.flatten(self.img_feat_pool(rearrange(_feat, "b h w c -> b c h w"))) for _feat in img_feats]
         img_feats = [rearrange(_feats, "b h w c -> b (h w) c") for _feats in img_feats]
 
         # stage 1
@@ -280,9 +267,7 @@ class TFuseNet(nn.Module):
         points1[1] = rearrange(
             self.att_fusion1_1(
                 data=img_feats[0],
-                queries_encoder=rearrange(
-                    points1[1], "(b n) c -> b n c", n=feat_shape["n"]
-                ),
+                queries_encoder=rearrange(points1[1], "(b n) c -> b n c", n=feat_shape["n"]),
             ),
             "b n c -> (b n) c",
         )
@@ -292,9 +277,7 @@ class TFuseNet(nn.Module):
         points1[1] = rearrange(
             self.att_fusion1_2(
                 data=cn1,
-                queries_encoder=rearrange(
-                    points1[1], "(b n) c -> b n c", n=feat_shape["n"]
-                ),
+                queries_encoder=rearrange(points1[1], "(b n) c -> b n c", n=feat_shape["n"]),
             ),
             "b n c -> (b n) c",
         )
@@ -315,9 +298,7 @@ class TFuseNet(nn.Module):
         points2[1] = rearrange(
             self.att_fusion2_1(
                 data=img_feats[1],
-                queries_encoder=rearrange(
-                    points2[1], "(b n) c -> b n c", n=feat_shape["n"]
-                ),
+                queries_encoder=rearrange(points2[1], "(b n) c -> b n c", n=feat_shape["n"]),
             ),
             "b n c -> (b n)c",
         )
@@ -326,9 +307,7 @@ class TFuseNet(nn.Module):
         points2[1] = rearrange(
             self.att_fusion2_2(
                 data=cn2,
-                queries_encoder=rearrange(
-                    points2[1], "(b n) c -> b n c", n=feat_shape["n"]
-                ),
+                queries_encoder=rearrange(points2[1], "(b n) c -> b n c", n=feat_shape["n"]),
             ),
             "b n c -> (b n) c",
         )
@@ -349,9 +328,7 @@ class TFuseNet(nn.Module):
         points3[1] = rearrange(
             self.att_fusion3_1(
                 data=img_feats[2],
-                queries_encoder=rearrange(
-                    points3[1], "(b n) c -> b n c", n=feat_shape["n"]
-                ),
+                queries_encoder=rearrange(points3[1], "(b n) c -> b n c", n=feat_shape["n"]),
             ),
             "b n c -> (b n)c",
         )
@@ -360,9 +337,7 @@ class TFuseNet(nn.Module):
         points3[1] = rearrange(
             self.att_fusion3_2(
                 data=cn3,
-                queries_encoder=rearrange(
-                    points3[1], "(b n) c -> b n c", n=feat_shape["n"]
-                ),
+                queries_encoder=rearrange(points3[1], "(b n) c -> b n c", n=feat_shape["n"]),
             ),
             "b n c -> (b n) c",
         )
@@ -372,9 +347,12 @@ class TFuseNet(nn.Module):
         norm, _ = pack([norm3, norm2, norm1], "b * n")
 
         img_feats = pack(img_feats_skip, "b *")[0]
-        img_feats = repeat(img_feats,"b c -> b c n", n=feat_shape["n"])
+        img_feats = repeat(img_feats, "b c -> b c n", n=feat_shape["n"])
         cn4, cn4_index = pack([coord, norm], "b * n")
-        cn4 = self.att_fusion4(data=rearrange(img_feats,"b c n -> b n c"),queries_encoder=rearrange(cn4,"b c n -> b n c"))
+        cn4 = self.att_fusion4(
+            data=rearrange(img_feats, "b c n -> b n c"),
+            queries_encoder=rearrange(cn4, "b c n -> b n c"),
+        )
         cn4 = rearrange(cn4, "b n c -> b c n")
         coord, norm = unpack(cn4, cn4_index, "b * n")
 
@@ -383,9 +361,7 @@ class TFuseNet(nn.Module):
         coord = [
             points3[0],
             rearrange(coord, "b c n -> (b n) c"),
-            torch.tensor(
-                [coord_shape["n"] * coord_shape["b"]], device=coord.device
-            ).int(),
+            torch.tensor([coord_shape["n"] * coord_shape["b"]], device=coord.device).int(),
         ]
         reference_index, _ = knn_query(self.k, coord[0], coord[-1])
         coord = rearrange(
@@ -422,9 +398,7 @@ class TFuseNet(nn.Module):
         points_feats = [
             points3[0],
             rearrange(points_feats, "b c n -> (b n) c"),
-            torch.tensor(
-                [feats_shape["n"] * feats_shape["b"]], device=points_feats.device
-            ).int(),
+            torch.tensor([feats_shape["n"] * feats_shape["b"]], device=points_feats.device).int(),
         ]
         reference_index, _ = knn_query(self.k, points_feats[0], points_feats[-1])
         points_feats = rearrange(
@@ -439,9 +413,7 @@ class TFuseNet(nn.Module):
         points_feats = [
             points3[0],
             rearrange(points_feats, "b c n -> (b n) c"),
-            torch.tensor(
-                [feats_shape["n"] * feats_shape["b"]], device=points_feats.device
-            ).int(),
+            torch.tensor([feats_shape["n"] * feats_shape["b"]], device=points_feats.device).int(),
         ]
         reference_index, _ = knn_query(self.k, points_feats[0], points_feats[-1])
         points_feats = rearrange(
@@ -453,8 +425,5 @@ class TFuseNet(nn.Module):
 
         feats = pack([points_feats, coord, norm], "b * n")[0]
         x = self.seg_head(feats)
-        x_shape = parse_shape(x, "b c n")
-        x = rearrange(x, "b c n -> b n c").contiguous()
-        x = nn.Softmax(dim=-1)(rearrange(x, "b n c -> (b n) c"))
-        x = rearrange(x, "(b n) c -> b n c", **x_shape)
+        x = x.transpose(2, 1)
         return x

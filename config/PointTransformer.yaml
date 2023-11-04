@@ -1,6 +1,6 @@
 seed: 42
 model:
-  NAME: PointNet
+  NAME: PointTransformer-Seg50
   num_classes: 17
 train:
   epochs: 70

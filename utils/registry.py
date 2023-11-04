@@ -1,8 +1,8 @@
 # Acknowledgement: built upon mmcv
+import copy
 import inspect
 import warnings
 from functools import partial
-import copy
 
 class Registry:
     """A registry to map strings to classes.
@@ -164,9 +164,7 @@ class Registry:
             self._module_dict[name] = module_class
     def deprecated_register_module(self, cls=None, force=False):
         warnings.warn(
-            "The old API of register_module(module, force=False) "
-            "is deprecated and will be removed, please use the new API "
-            "register_module(name=None, force=False, module=None) instead."
+            "The old API of register_module(module, force=False) " "is deprecated and will be removed, please use the new API " "register_module(name=None, force=False, module=None) instead."
         )
         if cls is None:
             return partial(self.deprecated_register_module, force=force)

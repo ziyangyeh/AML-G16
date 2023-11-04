@@ -1,17 +1,14 @@
-from monai.losses import *
-from torch.nn import *
 import torch.nn as nn
+from kornia.losses import DiceLoss
+from monai.losses import GeneralizedDiceLoss
+
+# from monai.losses import *
+from torch.nn import CrossEntropyLoss, NLLLoss
 
 from .build_losses import LOSSES
-from .lovasz_losses import lovasz_softmax_flat
-
-@LOSSES.register_module()
-class Lovasz(nn.Module):
-    def __init__(self) -> None:
-        super(Lovasz, self).__init__()
-    def forward(self, probas, labels):
-        return lovasz_softmax_flat(probas, labels)
+from .lovasz import LovaszLoss
 
 LOSSES.register_module(name="NLL", module=NLLLoss)
-LOSSES.register_module(name="Dice", module=DiceLoss)
+LOSSES.register_module(name="Dice", module=GeneralizedDiceLoss)
 LOSSES.register_module(name="CE", module=CrossEntropyLoss)
+LOSSES.register_module(name="Lovasz", module=LovaszLoss)

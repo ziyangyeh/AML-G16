@@ -1,6 +1,6 @@
 seed: 42
 model:
-  NAME: PointNet
+  NAME: iMeshSegNet
   num_classes: 17
 train:
   epochs: 70
@@ -9,12 +9,12 @@ train:
   ddp: False
   precision: bf16-mixed
   accumulate_grad_batches: 1
-  losses: [CE]
+  losses: [Dice]
   losses_weights: [1]
   optimizer: 
     NAME: AdamW
     lr: 1e-3
-    auto_lr: True
+    auto_lr: False
     weight_decay: 1e-5
   scheduler:
     NAME: CosineAnnealingWarmRestarts
@@ -28,11 +28,12 @@ dataset:
   image: False
   depth: False
   decimated: True
-  mesh_feature_select: [xyz,norm]
+  mesh_feature_select: [xyz,xyz3,norm]
   transform: False
+  cached_K_G: True
 dataloader:
-  batch_size: 4
-  auto_batch: True
+  batch_size: 16
+  auto_batch: False
   num_workers: 4
 logger:
   log_every_n_steps: 10

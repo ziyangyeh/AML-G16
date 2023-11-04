@@ -1,15 +1,18 @@
 import sys
 from typing import Callable, List, Literal, Optional
 
+import albumentations as A
 import numpy as np
 import pandas as pd
 import torch
 import vedo
-from PIL import Image
 from einops import rearrange
+from PIL import Image
+from scipy.spatial import distance_matrix
 from torch.nn.functional import one_hot
 from torch.utils.data import Dataset
-import albumentations as A
+
+from utils import get_graph_feature_cpu
 
 sys.path.insert(0, sys.path[0] + "/../")
 from utils import normalize
@@ -41,6 +44,8 @@ class Teeth3DS(Dataset):
         self.xyz3 = True if "xyz3" in mesh_feature_select else False
         self.norm = True if "norm" in mesh_feature_select else False
         self.norm3 = True if "norm3" in mesh_feature_select else False
+        self.asl = kwargs["cached_A_S_L"] if "cached_A_S_L" in kwargs.keys() else None
+        self.kg = kwargs["cached_K_G"] if "cached_K_G" in kwargs.keys() else None
     def __len__(self):
         return len(self.dataframe)
     def __getitem__(self, index):
@@ -98,7 +103,8 @@ class Teeth3DS(Dataset):
             # x0,y0,z0,x1,y1,z1,x2,y2,z2 in "feat", Ncells * 3 * 3 ==> Necells * 9
             faces_vertices = points[mesh.faces()].reshape(mesh.ncells * 3, 3)
             # Normalize cells' 3 vertices(from cells' indices).
-            faces_vertices = normalize(faces_vertices, ref=points, type="xyz").reshape(mesh.ncells, 9)
+            faces_vertices = normalize(faces_vertices, ref=points, type="xyz")
+            faces_vertices = faces_vertices.reshape(mesh.ncells, 9)
             feature_list.append(faces_vertices)
 
         if self.norm:
@@ -110,7 +116,8 @@ class Teeth3DS(Dataset):
 
         if self.norm3:
             faces_vertices_normals = mesh.pointdata["Normals"][mesh.faces()].reshape(mesh.ncells * 3, 3)
-            faces_vertices_normals = normalize(faces_vertices_normals, type="xyz").reshape(mesh.ncells, 9)
+            faces_vertices_normals = normalize(faces_vertices_normals, type="xyz")
+            faces_vertices_normals = faces_vertices_normals.reshape(mesh.ncells, 9)
             feature_list.append(faces_vertices_normals)
 
         # Concatenate features
@@ -120,23 +127,44 @@ class Teeth3DS(Dataset):
         labels = torch.tensor(mesh.celldata["Labels"], device=torch.device("cpu"))
         onehot = one_hot(labels, num_classes=self.number_classes).numpy()
 
+        result = {
+            "x": feats.astype(np.float32).transpose(1, 0),
+            "labels": labels,
+            "onehot": onehot,
+        }
+        if self.asl is not None:
+            if self.asl == False and self.xyz:
+                S1 = np.zeros([len(cell_centers), len(cell_centers)], dtype="float32")
+                S2 = np.zeros([len(cell_centers), len(cell_centers)], dtype="float32")
+                D = distance_matrix(cell_centers, cell_centers)
+                S1[D < 0.1] = 1.0
+                S1 = S1 / np.dot(np.sum(S1, axis=1, keepdims=True), np.ones((1, len(cell_centers))))
+
+                S2[D < 0.2] = 1.0
+                S2 = S2 / np.dot(np.sum(S2, axis=1, keepdims=True), np.ones((1, len(cell_centers))))
+            elif self.asl == True and self.xyz:
+                S1 = np.load(self.dataframe.iloc[index, self.dataframe.columns.get_loc("as")])
+                S2 = np.load(self.dataframe.iloc[index, self.dataframe.columns.get_loc("al")])
+            result["a_s"] = S1.astype(np.float32)
+            result["a_l"] = S2.astype(np.float32)
+        if self.kg is not None:
+            if self.kg == False and self.xyz:
+                KG_6 = get_graph_feature_cpu(cell_centers.transpose(1, 0), k=6)
+                KG_12 = get_graph_feature_cpu(cell_centers.transpose(1, 0), k=12)
+            elif self.kg == True and self.xyz:
+                KG_6 = np.load(self.dataframe.iloc[index, self.dataframe.columns.get_loc("kg6")])
+                KG_12 = np.load(self.dataframe.iloc[index, self.dataframe.columns.get_loc("kg12")])
+            result["kg_6"] = KG_6.astype(np.float32)
+            result["kg_12"] = KG_12.astype(np.float32)
+
         # Combine modalities
         if self.c != 0:
             if self.c != 1:
                 images = rearrange(np.asarray(list(image_dict.values())), "n h w c -> n c h w")
             else:
                 images = rearrange(np.asarray(list(image_dict.values())), "n h w-> n () h w")
-            return {
-                "x": feats.astype(np.float32),
-                "labels": labels,
-                "onehot": onehot,
-                "images": images,
-            }
-        return {
-            "x": feats.astype(np.float32),
-            "labels": labels,
-            "onehot": onehot,
-        }
+            result["images"] = images
+        return result
     def _select(self):
         if self.image:
             img_lst = sorted([i for i in self.dataframe.columns.values if "image" in i])
@@ -185,7 +213,7 @@ class Teeth3DS(Dataset):
 
 if __name__ == "__main__":
     df = pd.read_csv("formatted_data/teeth3ds.csv")
-    teeth3ds = Teeth3DS(df)
+    teeth3ds = Teeth3DS(df, image=False, depth=False)
     print({f"{k}_shape": v.shape for k, v in teeth3ds[0].items()})
     teeth3ds = Teeth3DS(df, image=False)
     print({f"{k}_shape": v.shape for k, v in teeth3ds[0].items()})
@@ -197,5 +225,5 @@ if __name__ == "__main__":
     print({f"{k}_shape": v.shape for k, v in teeth3ds[0].items()})
     teeth3ds = Teeth3DS(df, "upper", mesh_feature_select=["norm3", "norm"])
     print({f"{k}_shape": v.shape for k, v in teeth3ds[0].items()})
-    teeth3ds = Teeth3DS(df, "lower", image=False, depth=False)
+    teeth3ds = Teeth3DS(df, "lower", image=False, depth=True)
     print({f"{k}_shape": v.shape for k, v in teeth3ds[0].items()})

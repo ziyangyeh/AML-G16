@@ -1,6 +1,6 @@
 seed: 42
 model:
-  NAME: PointNet
+  NAME: TSGCNet
   num_classes: 17
 train:
   epochs: 70
@@ -28,7 +28,7 @@ dataset:
   image: False
   depth: False
   decimated: True
-  mesh_feature_select: [xyz,norm]
+  mesh_feature_select: [xyz,xyz3,norm,norm3]
   transform: False
 dataloader:
   batch_size: 4

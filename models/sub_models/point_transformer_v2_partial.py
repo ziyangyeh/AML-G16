@@ -8,19 +8,17 @@ Please cite our work if the code is helpful to you.
 """
 
 from copy import deepcopy
+
+import einops
+import pointops
 import torch
 import torch.nn as nn
-from torch.utils.checkpoint import checkpoint
-
+from timm.models.layers import DropPath
 from torch.utils.checkpoint import checkpoint
 from torch_geometric.nn.pool import voxel_grid
 from torch_scatter import segment_csr
 
-import einops
-from timm.models.layers import DropPath
-import pointops
-
-from .utils import offset2batch, batch2offset
+from .utils import batch2offset, offset2batch
 
 class PointBatchNorm(nn.Module):
     """

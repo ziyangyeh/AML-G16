@@ -3,9 +3,11 @@ __pycache__
 .ipynb_checkpoints
 .DS_Store
 
+lightning_logs
 checkpoints
 wandb
 formatted_data
 Teeth3DS
+.lr_find*
 
 test.py

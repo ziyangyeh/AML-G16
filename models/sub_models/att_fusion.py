@@ -1,11 +1,10 @@
-from math import sqrt
 from functools import wraps
+from math import sqrt
 
 import torch
-from torch import nn, einsum
 import torch.nn.functional as F
-
 from einops import rearrange, repeat
+from torch import einsum, nn
 
 # helpers
 def exists(val):
@@ -103,7 +102,16 @@ class AttentionFusion(nn.Module):
         super().__init__()
 
         # Cross-Attention
-        self.cross_attend_blocks = nn.ModuleList([PreNorm(latent_dim, Attention(latent_dim, dim, heads=cross_heads, dim_head=cross_dim_head), context_dim=dim), PreNorm(latent_dim, FeedForward(latent_dim))])
+        self.cross_attend_blocks = nn.ModuleList(
+            [
+                PreNorm(
+                    latent_dim,
+                    Attention(latent_dim, dim, heads=cross_heads, dim_head=cross_dim_head),
+                    context_dim=dim,
+                ),
+                PreNorm(latent_dim, FeedForward(latent_dim)),
+            ]
+        )
         #
         get_latent_attn = lambda: PreNorm(latent_dim, Attention(latent_dim, heads=latent_heads, dim_head=latent_dim_head))
         get_latent_ff = lambda: PreNorm(latent_dim, FeedForward(latent_dim))

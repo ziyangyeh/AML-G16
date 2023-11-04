@@ -1,11 +1,13 @@
 from typing import Optional
 
+import lightning.pytorch as pl
 import pandas as pd
-import pytorch_lightning as pl
+import vedo
 from omegaconf import OmegaConf
 from torch.utils.data import DataLoader
-import vedo
+
 from utils import GetVTKTransformationMatrix
+
 from .teeth3ds import Teeth3DS
 
 def augment(mesh: vedo.Mesh):
